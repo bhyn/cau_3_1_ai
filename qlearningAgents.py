@@ -39,6 +39,8 @@ class QLearningAgent(ReinforcementAgent):
         "You can initialize Q-values here..."
         ReinforcementAgent.__init__(self, **args)
 
+        # Q(s,a)를 저장하는 테이블입니다.
+        # key는 (state, action)이고, 처음 보는 쌍은 util.Counter 덕분에 0으로 시작합니다.
         self.qValues = util.Counter()
 
     def getQValue(self, state, action):
@@ -47,6 +49,7 @@ class QLearningAgent(ReinforcementAgent):
           Should return 0.0 if we have never seen a state
           or the Q node value otherwise
         """
+        # 직접 dict를 쓰지 않고 Counter를 쓰면 unseen action의 Q값이 자동으로 0입니다.
         return self.qValues[(state, action)]
 
     def computeValueFromQValues(self, state):
@@ -58,8 +61,11 @@ class QLearningAgent(ReinforcementAgent):
         """
         legalActions = self.getLegalActions(state)
         if len(legalActions) == 0:
+            # terminal state에서는 고를 행동이 없으므로 max Q값을 0으로 봅니다.
             return 0.0
 
+        # V(s) = max_a Q(s,a)
+        # 여기서도 반드시 getQValue를 써야 ApproximateQAgent가 같은 로직을 재사용할 수 있습니다.
         return max(self.getQValue(state, action) for action in legalActions)
 
     def computeActionFromQValues(self, state):
@@ -70,13 +76,16 @@ class QLearningAgent(ReinforcementAgent):
         """
         legalActions = self.getLegalActions(state)
         if len(legalActions) == 0:
+            # terminal state에서는 실제로 할 행동이 없습니다.
             return None
 
         bestValue = self.computeValueFromQValues(state)
+        # 같은 최고 Q값을 가진 행동이 여러 개라면 모두 후보로 모읍니다.
         bestActions = [
             action for action in legalActions
             if self.getQValue(state, action) == bestValue
         ]
+        # 동점은 랜덤으로 깨야 한 방향으로만 치우치지 않습니다.
         return random.choice(bestActions)
 
     def getAction(self, state):
@@ -89,14 +98,15 @@ class QLearningAgent(ReinforcementAgent):
           HINT: You might want to use util.flipCoin(prob)
           HINT: To pick randomly from a list, use random.choice(list)
         """
-        # Pick Action
+        # 현재 state에서 가능한 행동 목록을 먼저 가져옵니다.
         legalActions = self.getLegalActions(state)
         action = None
 
         if len(legalActions) == 0:
             return None
 
-        # Explore with probability epsilon; otherwise exploit current Q-values.
+        # epsilon 확률로는 탐험(explore): 아무 legal action이나 랜덤 선택합니다.
+        # 나머지 확률로는 활용(exploit): 현재 Q값 기준 최선의 행동을 선택합니다.
         if util.flipCoin(self.epsilon):
             action = random.choice(legalActions)
         else:
@@ -113,7 +123,13 @@ class QLearningAgent(ReinforcementAgent):
           it will be called on your behalf
         """
         oldQValue = self.getQValue(state, action)
+
+        # sample은 "이번 경험으로 관측한 목표값"입니다.
+        # 즉시 reward + discount * 다음 state에서 기대되는 최고 Q값입니다.
         sample = reward + self.discount * self.computeValueFromQValues(nextState)
+
+        # Q-learning update:
+        # 기존 Q값을 일부 남기고, 새 sample 쪽으로 alpha만큼 이동합니다.
         self.qValues[(state, action)] = (
             (1 - self.alpha) * oldQValue + self.alpha * sample
         )
@@ -176,6 +192,8 @@ class ApproximateQAgent(PacmanQAgent):
           where * is the dotProduct operator
         """
         features = self.featExtractor.getFeatures(state, action)
+        # Approximate Q-learning에서는 Q(s,a)를 테이블에 직접 저장하지 않고
+        # feature 값들과 weight들의 내적(dot product)으로 계산합니다.
         return self.weights * features
 
     def update(self, state, action, nextState, reward: float):
@@ -183,13 +201,16 @@ class ApproximateQAgent(PacmanQAgent):
            Should update your weights based on transition
         """
         features = self.featExtractor.getFeatures(state, action)
+
+        # correction은 현재 예측 Q값이 목표값과 얼마나 차이 나는지입니다.
+        # 일반 Q-learning의 (sample - oldQValue)와 같은 역할을 합니다.
         correction = (
             reward
             + self.discount * self.computeValueFromQValues(nextState)
             - self.getQValue(state, action)
         )
 
-        # Each feature weight moves in proportion to that feature's value.
+        # 각 weight는 해당 feature가 얼마나 크게 나타났는지에 비례해서 조정됩니다.
         for feature, value in features.items():
             self.weights[feature] += self.alpha * correction * value
 

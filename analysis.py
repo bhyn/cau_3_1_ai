@@ -23,6 +23,9 @@ def question2a():
     """
       Prefer the close exit (+1), risking the cliff (-10).
     """
+    # discount를 낮게 잡으면 가까운 +1 출구를 더 선호합니다.
+    # noise를 0으로 두면 미끄러질 위험이 없어서 cliff 근처 짧은 길을 택할 수 있습니다.
+    # living reward를 음수로 두면 오래 돌아다니는 것보다 빨리 끝내는 쪽이 유리합니다.
     answerDiscount = 0.2
     answerNoise = 0.0
     answerLivingReward = -1.0
@@ -33,6 +36,9 @@ def question2b():
     """
       Prefer the close exit (+1), but avoiding the cliff (-10).
     """
+    # 가까운 출구를 원하므로 discount는 낮게 둡니다.
+    # noise를 주면 cliff 옆 길이 위험해져서 안전한 위쪽 경로를 선택하게 됩니다.
+    # living reward는 음수라서 그래도 가까운 출구로 빨리 가려 합니다.
     answerDiscount = 0.2
     answerNoise = 0.2
     answerLivingReward = -1.0
@@ -43,6 +49,9 @@ def question2c():
     """
       Prefer the distant exit (+10), risking the cliff (-10).
     """
+    # discount를 높게 잡으면 멀리 있는 +10 보상도 충분히 가치 있게 봅니다.
+    # noise가 0이면 cliff 근처로 가도 실제로 미끄러지지 않으므로 짧은 위험 경로를 택합니다.
+    # living reward를 음수로 둬서 가능한 빨리 +10 출구에 도착하게 합니다.
     answerDiscount = 0.9
     answerNoise = 0.0
     answerLivingReward = -1.0
@@ -53,6 +62,9 @@ def question2d():
     """
       Prefer the distant exit (+10), avoiding the cliff (-10).
     """
+    # 먼 +10 출구를 선호하도록 discount는 높게 둡니다.
+    # noise가 있으면 cliff 옆 길의 기대값이 나빠지므로 안전한 위쪽 경로를 고릅니다.
+    # living reward를 0으로 두면 긴 안전 경로의 시간 손해가 너무 커지지 않습니다.
     answerDiscount = 0.9
     answerNoise = 0.2
     answerLivingReward = 0.0
@@ -63,6 +75,8 @@ def question2e():
     """
       Avoid both exits and the cliff (so an episode should never terminate).
     """
+    # 매 step마다 양수 보상을 받게 하면 종료하지 않고 계속 움직이는 것이 유리합니다.
+    # discount도 충분히 높게 둬서 미래의 living reward를 크게 평가하게 합니다.
     answerDiscount = 0.9
     answerNoise = 0.0
     answerLivingReward = 1.0

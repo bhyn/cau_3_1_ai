@@ -41,7 +41,9 @@ class ValueIterationAgent(ValueEstimationAgent):
         self.mdp = mdp
         self.discount = discount
         self.iterations = iterations
-        self.values = util.Counter() # A Counter is a dict with default 0
+        # self.values[state]는 현재까지 계산한 V(s) 값입니다.
+        # util.Counter는 없는 state를 물어봐도 기본값 0을 돌려줍니다.
+        self.values = util.Counter()
         self.runValueIteration()
 
     def runValueIteration(self):
@@ -50,20 +52,25 @@ class ValueIterationAgent(ValueEstimationAgent):
           value iteration, V_k+1(...) depends on V_k(...)'s.
         """
         for _ in range(self.iterations):
+            # 이번 반복에서 새로 계산한 V_{k+1} 값을 여기에 따로 저장합니다.
+            # 바로 self.values를 고치면 같은 반복 안에서 값이 섞이기 때문입니다.
             nextValues = util.Counter()
 
-            # Every state update must use the previous iteration's values.
             for state in self.mdp.getStates():
                 actions = self.mdp.getPossibleActions(state)
                 if len(actions) == 0:
+                    # terminal state처럼 가능한 행동이 없으면 미래 보상도 없으므로 V(s)=0입니다.
                     nextValues[state] = 0
                     continue
 
+                # Bellman update:
+                # 가능한 행동들 중 Q(s,a)가 가장 큰 값을 현재 state의 새 value로 사용합니다.
                 nextValues[state] = max(
                     self.computeQValueFromValues(state, action)
                     for action in actions
                 )
 
+            # 한 번의 반복이 끝난 뒤에만 전체 value 테이블을 교체합니다.
             self.values = nextValues
 
     def getValue(self, state):
@@ -79,7 +86,8 @@ class ValueIterationAgent(ValueEstimationAgent):
         """
         qValue = 0
 
-        # Expected utility: sum over possible next states.
+        # Q(s,a)는 가능한 nextState마다
+        # 확률 * (즉시 보상 + 할인된 다음 state value)를 모두 더한 값입니다.
         for nextState, prob in self.mdp.getTransitionStatesAndProbs(state, action):
             reward = self.mdp.getReward(state, action, nextState)
             qValue += prob * (reward + self.discount * self.values[nextState])
@@ -97,9 +105,11 @@ class ValueIterationAgent(ValueEstimationAgent):
         """
         actions = self.mdp.getPossibleActions(state)
         if len(actions) == 0:
+            # 행동할 수 없는 terminal state에서는 정책도 없습니다.
             return None
 
-        # Check every legal action directly; Counter.argMax can miss unseen keys.
+        # 모든 legal action을 직접 확인합니다.
+        # Counter.argMax만 쓰면 아직 Counter에 없는 행동을 놓칠 수 있습니다.
         bestAction = None
         bestValue = float('-inf')
         for action in actions:

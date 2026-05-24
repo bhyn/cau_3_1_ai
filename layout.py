@@ -12,7 +12,7 @@
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
 
-from util import manhattanDist
+from util import manhattanDistance
 from game import Grid
 import os
 import random
@@ -86,7 +86,7 @@ class Layout:
     def getFurthestCorner(self, pacPos):
         poses = [(1, 1), (1, self.height - 2), (self.width - 2, 1),
                  (self.width - 2, self.height - 2)]
-        dist, pos = max([(manhattanDist(p, pacPos), p) for p in poses])
+        dist, pos = max([(manhattanDistance(p, pacPos), p) for p in poses])
         return pos
 
     def isVisibleFrom(self, ghostPos, pacPos, pacDirection):

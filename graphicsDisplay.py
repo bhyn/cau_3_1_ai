@@ -687,7 +687,7 @@ class FirstPersonPacmanGraphics(PacmanGraphics):
         self.previousState = state
 
     def lookAhead(self, config, state):
-        if config.getDirection() == 'Stop': 
+        if config.getDirection() == 'Stop':
             return
         else:
             pass

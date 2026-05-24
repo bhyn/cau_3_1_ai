@@ -1,18 +1,6 @@
 class: "EvalAgentTest"
 
-agentName: "ExpectimaxAgent"
-agentArgs: "evalFn=better"
-layoutName: "smallClassic"
-maxTime: "120"
-numGames: "10"
+# 100 test games after 2000 training games
+pacmanParams: "-p PacmanQAgent -x 2000 -n 2100 -l smallGrid -q -f --fixRandomSeed"
 
-nonTimeoutMinimum: "0"
-nonTimeoutThresholds: "10"
-
-scoreThresholds: "500 1000"
-
-winsMinimum: "1"
-winsThresholds: "1 5 10"
-
-randomSeed: "0"
-ghosts: "[RandomGhost(1)]"
+winsThresholds: "70"

@@ -16,7 +16,7 @@ from game import Agent
 from game import Actions
 from game import Directions
 import random
-from util import manhattanDist
+from util import manhattanDistance
 import util
 
 
@@ -72,7 +72,7 @@ class DirectionalGhost(GhostAgent):
         pacmanPosition = state.getPacmanPosition()
 
         # Select best actions given the state
-        distancesToPacman = [manhattanDist(
+        distancesToPacman = [manhattanDistance(
             pos, pacmanPosition) for pos in newPositions]
         if isScared:
             bestScore = max(distancesToPacman)

@@ -495,7 +495,8 @@ class GameStateData:
         else:
             return ' '
 
-    def _pacStr(self, dir):
+    def _pacStr(self,
+                dir):
         if dir == Directions.NORTH:
             return 'v'
         if dir == Directions.SOUTH:
@@ -550,7 +551,7 @@ class Game:
     The Game manages the control flow, soliciting actions from agents.
     """
 
-    def __init__(self, agents, display, rules, startingIndex=0, muteAgents=False, catchExceptions=False):
+    def __init__(self, agents, horizon, display, rules, startingIndex=0, muteAgents=False, catchExceptions=False):
         self.agentCrashed = False
         self.agents = agents
         self.display = display
@@ -563,6 +564,7 @@ class Game:
         self.totalAgentTimes = [0 for agent in agents]
         self.totalAgentTimeWarnings = [0 for agent in agents]
         self.agentTimeout = False
+        self.horizon = horizon
         import io
         self.agentOutput = [io.StringIO() for agent in agents]
 
@@ -649,8 +651,10 @@ class Game:
 
         agentIndex = self.startingIndex
         numAgents = len(self.agents)
+        timestep = 0
 
-        while not self.gameOver:
+        while not self.gameOver and (self.horizon < 0 or timestep < self.horizon):
+            timestep += 1
             # Fetch the next agent
             agent = self.agents[agentIndex]
             move_time = 0

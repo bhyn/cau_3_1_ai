@@ -19,6 +19,8 @@
 # Set the given parameters to obtain the specified policies through
 # value iteration.
 
+# 기본적으로 close exit을 선호하면 경로가 짧고, 먼 exit을 선호하면 경로가 긴가봄 -> 리빙리워드로 너무 길어지지 않게 조절해야 함
+
 def question2a():
     """
       Prefer the close exit (+1), risking the cliff (-10).
@@ -64,7 +66,7 @@ def question2d():
     """
     # 먼 +10 출구를 선호하도록 discount는 높게 둡니다.
     # noise가 있으면 cliff 옆 길의 기대값이 나빠지므로 안전한 위쪽 경로를 고릅니다.
-    # living reward를 0으로 두면 긴 안전 경로의 시간 손해가 너무 커지지 않습니다.
+    # 이건 결국 장기적인 보상을 보면서 안전한 길을 고르는 건데, 그러면 리빙 리워드를 음수로 해놔야 그나마 빨리 +10 출구로 가려고 합니다. 
     answerDiscount = 0.9
     answerNoise = 0.2
     answerLivingReward = 0.0

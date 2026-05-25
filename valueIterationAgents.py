@@ -41,6 +41,8 @@ class ValueIterationAgent(ValueEstimationAgent):
         self.mdp = mdp
         self.discount = discount
         self.iterations = iterations
+        # self.values[state]는 현재까지 계산한 V(s) 값입니다.
+        # util.Counter는 없는 state를 물어봐도 기본값 0을 돌려줍니다.
         self.values = util.Counter()
         self.runValueIteration()
 
@@ -49,25 +51,26 @@ class ValueIterationAgent(ValueEstimationAgent):
           Run the value iteration algorithm. Note that in standard
           value iteration, V_k+1(...) depends on V_k(...)'s.
         """
-        # V(s)=max_a Q(s,a) 
-            
         for _ in range(self.iterations):
+            # 이번 반복에서 새로 계산한 V_{k+1} 값을 여기에 따로 저장합니다.
+            # 바로 self.values를 고치면 같은 반복 안에서 값이 섞이기 때문입니다.
             nextValues = util.Counter()
 
             for state in self.mdp.getStates():
-                # Q(s,a)를 계산하기 전에 action들을 가져온다. 
                 actions = self.mdp.getPossibleActions(state)
                 if len(actions) == 0:
-                    # terminal state처럼 가능한 행동이 없으면 미래 보상도 없으므로 V(s)=0임
+                    # terminal state처럼 가능한 행동이 없으면 미래 보상도 없으므로 V(s)=0입니다.
                     nextValues[state] = 0
                     continue
 
-                # 가져온 action들 중 Q(s,a)가 가장 큰 것을 max_a 로 선택한다. 
+                # Bellman update:
+                # 가능한 행동들 중 Q(s,a)가 가장 큰 값을 현재 state의 새 value로 사용합니다.
                 nextValues[state] = max(
                     self.computeQValueFromValues(state, action)
                     for action in actions
                 )
 
+            # 한 번의 반복이 끝난 뒤에만 전체 value 테이블을 교체합니다.
             self.values = nextValues
 
     def getValue(self, state):
@@ -82,12 +85,11 @@ class ValueIterationAgent(ValueEstimationAgent):
           value function stored in self.values.
         """
         qValue = 0
-        # Q(s,a)=sum_{s'} T(s,a,s') * (R(s,a,s') + discount * V(s'))
-        
-        # s'들을 순회한다. 
+
+        # Q(s,a)는 가능한 nextState마다
+        # 확률 * (즉시 보상 + 할인된 다음 state value)를 모두 더한 값입니다.
         for nextState, prob in self.mdp.getTransitionStatesAndProbs(state, action):
             reward = self.mdp.getReward(state, action, nextState)
-            # 누적하여 sum을 한다. 
             qValue += prob * (reward + self.discount * self.values[nextState])
 
         return qValue

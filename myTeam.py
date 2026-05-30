@@ -285,6 +285,16 @@ class OffensiveAgent(TeamAgent):
     capsules = self.getCapsules(successor)
     activeGhosts = self.activeGhosts(successor)
     activeGhostDistance = self.minDistance(pos, [p for i, s, p in activeGhosts])
+    invaders = self.visibleInvaders(successor)
+
+    if invaders and not myState.isPacman:
+      # 상대가 둘 다 공격하면 수비수 혼자서는 막기 어렵다.
+      # 공격수도 우리 진영에 있을 때는 잠깐 적 팩맨을 같이 쫓는다.
+      invaderDistance = self.minDistance(pos, [p for i, s, p in invaders])
+      score -= 85 * invaderDistance
+      score -= 450 * len(invaders)
+      if invaderDistance <= 2:
+        score += 700
 
     # 공격수의 기본 목표는 가까운 음식을 향해 가는 것이다.
     # 주변에 음식이 여러 개 있으면 그쪽이 더 좋아 보이게 한다.
@@ -359,7 +369,10 @@ class DefensiveAgent(TeamAgent):
       return True
     if self.getScore(gameState) <= -4:
       return True
-    return timeLeft and timeLeft < 260 and self.getScore(gameState) <= 0
+
+    # 기본 맵에서 계속 0:0으로 굳으면 리그 승점이 부족하다.
+    # 침입자가 안 보이는 중후반에는 수비수도 공격에 가서 승리를 노린다.
+    return timeLeft and timeLeft < 1900 and self.getScore(gameState) <= 0
 
   def attackEvaluation(self, gameState, action):
     successor = self.getSuccessor(gameState, action)

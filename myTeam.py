@@ -42,6 +42,8 @@ class TeamAgent(CaptureAgent):
     self.homeX = self.midX - 1 if self.red else self.midX
     self.enemyX = self.midX if self.red else self.midX - 1
     self.initialFood = len(self.getFood(gameState).asList())
+    self.initialCapsules = len(self.getCapsules(gameState)) + len(self.getCapsulesYouAreDefending(gameState))
+    self.isSparseNoCapsuleMap = self.initialFood < 35 and self.initialCapsules == 0
 
     # 가운데 선 근처에서 실제로 지나갈 수 있는 칸들이다.
     # 공격수는 도망칠 때 여기로 돌아오고, 수비수는 여기 근처를 지킨다.
@@ -58,6 +60,7 @@ class TeamAgent(CaptureAgent):
     # 그래서 공격수는 막다른 길에 들어가는 선택을 더 싫어하게 만든다.
     self.deadEnds = self._computeDeadEnds()
     self.patrolTarget = self._selectPatrolTarget()
+    self.patrolTargets = self._selectPatrolTargets()
 
   def chooseAction(self, gameState):
     actions = gameState.getLegalActions(self.index)
@@ -95,6 +98,18 @@ class TeamAgent(CaptureAgent):
       return self.start
     centerY = self.height // 2
     return min(self.homeBoundary, key=lambda p: abs(p[1] - centerY))
+
+  def _selectPatrolTargets(self):
+    if not self.homeBoundary:
+      return [self.start]
+    lowToHigh = sorted(self.homeBoundary, key=lambda p: p[1])
+    center = self._selectPatrolTarget()
+    patrols = [center]
+    if lowToHigh[0] != center:
+      patrols.append(lowToHigh[0])
+    if lowToHigh[-1] != center:
+      patrols.append(lowToHigh[-1])
+    return patrols
 
   def _computeDeadEnds(self):
     # 막다른 길 찾기:
@@ -237,6 +252,14 @@ class TeamAgent(CaptureAgent):
   def homeDistance(self, pos):
     return self.minDistance(pos, self.homeBoundary)
 
+  def currentPatrolTarget(self):
+    # 음식이 적고 통로가 긴 맵에서는 한곳에 서 있으면 반대쪽이 뚫린다.
+    # 그래서 가운데, 아래쪽, 위쪽 입구를 천천히 번갈아 보게 한다.
+    if self.isSparseNoCapsuleMap and self.patrolTargets:
+      index = (len(self.observationHistory) // 35) % len(self.patrolTargets)
+      return self.patrolTargets[index]
+    return self.patrolTarget
+
 
 class OffensiveAgent(TeamAgent):
   """주로 상대 음식을 먹는 공격수."""
@@ -319,6 +342,13 @@ class DefensiveAgent(TeamAgent):
     if remainingFood <= 5:
       return True
 
+    if self.isSparseNoCapsuleMap and self.getScore(gameState) <= -2:
+      return True
+
+    timeLeft = getattr(gameState.data, 'timeleft', 0)
+    if self.isSparseNoCapsuleMap and timeLeft < 900 and self.getScore(gameState) <= 0:
+      return True
+
     # 음식이 적은 맵에서는 한 번 뚫리면 손해가 크다.
     # 그래서 수비수를 쉽게 공격에 보내지 않는다.
     if self.initialFood < 35:
@@ -329,7 +359,6 @@ class DefensiveAgent(TeamAgent):
       return True
     if self.getScore(gameState) <= -4:
       return True
-    timeLeft = getattr(gameState.data, 'timeleft', 0)
     return timeLeft and timeLeft < 260 and self.getScore(gameState) <= 0
 
   def attackEvaluation(self, gameState, action):
@@ -404,7 +433,7 @@ class DefensiveAgent(TeamAgent):
     if defendedCapsules:
       score -= 7 * self.minDistance(pos, defendedCapsules)
 
-    score -= 10 * self.safeDistance(pos, self.patrolTarget)
+    score -= 10 * self.safeDistance(pos, self.currentPatrolTarget())
     if pos in self.homeBoundary:
       score += 20
     return score

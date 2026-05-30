@@ -287,7 +287,12 @@ class OffensiveAgent(TeamAgent):
     activeGhostDistance = self.minDistance(pos, [p for i, s, p in activeGhosts])
     invaders = self.visibleInvaders(successor)
 
-    if invaders and not myState.isPacman:
+    timeLeft = getattr(gameState.data, 'timeleft', 0)
+    shouldHelpDefense = invaders and not myState.isPacman
+    if self.getScore(gameState) <= 0 and timeLeft < 1200:
+      shouldHelpDefense = False
+
+    if shouldHelpDefense:
       # 상대가 둘 다 공격하면 수비수 혼자서는 막기 어렵다.
       # 공격수도 우리 진영에 있을 때는 잠깐 적 팩맨을 같이 쫓는다.
       invaderDistance = self.minDistance(pos, [p for i, s, p in invaders])

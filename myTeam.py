@@ -15,20 +15,25 @@ from util import nearestPoint
 import random
 
 
+# 전체 흐름:
+# 1. OffensiveAgent는 상대 진영으로 가서 음식을 많이 먹는다.
+# 2. DefensiveAgent는 우리 진영을 지키다가, 안전하면 같이 공격한다.
+# 3. 둘 다 매 턴마다 "갈 수 있는 방향"을 하나씩 미리 가본 뒤,
+#    가장 점수가 좋아 보이는 방향을 고른다.
 def createTeam(firstIndex, secondIndex, isRed,
                first='OffensiveAgent', second='DefensiveAgent'):
-  # The submitted team is one attacker and one defender by default.
+  # 기본 팀 구성은 공격수 1명, 수비수 1명이다.
   return [globals()[first](firstIndex), globals()[second](secondIndex)]
 
 
 class TeamAgent(CaptureAgent):
-  """Shared helpers for a fast reflex capture team."""
+  """공격수와 수비수가 같이 쓰는 도구 모음."""
 
   def registerInitialState(self, gameState):
     CaptureAgent.registerInitialState(self, gameState)
 
-    # Cache map information that is reused every turn.  This keeps chooseAction
-    # cheap enough for the one-second time limit.
+    # 처음 한 번만 지도 정보를 저장해 둔다.
+    # 매 턴마다 다시 계산하면 느려지기 때문이다.
     self.start = gameState.getAgentPosition(self.index)
     self.walls = gameState.getWalls()
     self.width = self.walls.width
@@ -38,8 +43,8 @@ class TeamAgent(CaptureAgent):
     self.enemyX = self.midX if self.red else self.midX - 1
     self.initialFood = len(self.getFood(gameState).asList())
 
-    # Boundary cells are the legal crossings between our side and enemy side.
-    # They are useful for returning home and for defensive patrol.
+    # 가운데 선 근처에서 실제로 지나갈 수 있는 칸들이다.
+    # 공격수는 도망칠 때 여기로 돌아오고, 수비수는 여기 근처를 지킨다.
     self.homeBoundary = self._openColumn(self.homeX)
     self.enemyBoundary = self._openColumn(self.enemyX)
     self.legalPositions = [
@@ -49,21 +54,21 @@ class TeamAgent(CaptureAgent):
       if not self.walls[x][y]
     ]
 
-    # Dead ends are risky when an active enemy ghost is visible nearby, so the
-    # offensive agent gives those positions an extra penalty.
+    # 막다른 길은 적 유령이 가까울 때 위험하다.
+    # 그래서 공격수는 막다른 길에 들어가는 선택을 더 싫어하게 만든다.
     self.deadEnds = self._computeDeadEnds()
     self.patrolTarget = self._selectPatrolTarget()
 
   def chooseAction(self, gameState):
     actions = gameState.getLegalActions(self.index)
 
-    # Standing still almost never helps in capture, but keep it if it is the
-    # only legal action.
+    # 가만히 있기(STOP)는 대부분 손해다.
+    # 단, 정말 움직일 곳이 없으면 남겨 둔다.
     if len(actions) > 1 and Directions.STOP in actions:
       actions.remove(Directions.STOP)
 
-    # This is a one-step reflex policy: simulate each legal move, score the
-    # successor state with hand-tuned features, then choose among the best moves.
+    # 각 방향으로 한 번 가본 척해 보고 점수를 매긴다.
+    # 그중 점수가 가장 높은 방향을 고른다.
     scores = [(self.evaluateAction(gameState, action), action) for action in actions]
     bestScore = max(score for score, action in scores)
     bestActions = [action for score, action in scores if score == bestScore]
@@ -76,8 +81,8 @@ class TeamAgent(CaptureAgent):
     successor = gameState.generateSuccessor(self.index, action)
     pos = successor.getAgentState(self.index).getPosition()
 
-    # Berkeley capture agents can occasionally be between grid cells.  Evaluating
-    # at the next grid point makes distance features more stable.
+    # 가끔 칸과 칸 사이에 걸쳐 있을 수 있다.
+    # 그런 경우 한 번 더 움직여서 정확한 칸 기준으로 평가한다.
     if pos != nearestPoint(pos):
       return successor.generateSuccessor(self.index, action)
     return successor
@@ -92,7 +97,8 @@ class TeamAgent(CaptureAgent):
     return min(self.homeBoundary, key=lambda p: abs(p[1] - centerY))
 
   def _computeDeadEnds(self):
-    # Peel off degree-1 corridors until only non-dead-end cells remain.
+    # 막다른 길 찾기:
+    # 길이 하나뿐인 끝 칸부터 지워 나가면 위험한 막다른 통로가 나온다.
     degrees = {}
     neighbors = {}
     for pos in self.legalPositions:
@@ -118,11 +124,10 @@ class TeamAgent(CaptureAgent):
     if pos1 is None or pos2 is None:
       return 9999
     try:
-      # Prefer exact maze distance from the precomputed distancer.
+      # 벽을 돌아가는 실제 미로 거리를 우선 사용한다.
       return self.getMazeDistance(pos1, pos2)
     except Exception:
-      # Some unusual layouts may pass a non-open cell; fall back instead of
-      # crashing during evaluation.
+      # 이상한 좌표가 들어와도 게임이 멈추지 않게 대략 거리로 대신 계산한다.
       return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
   def minDistance(self, pos, targets):
@@ -187,8 +192,8 @@ class TeamAgent(CaptureAgent):
     if previous is None:
       return []
 
-    # If a defended food dot disappeared since our last observation, an invader
-    # was likely there even if it is no longer visible.
+    # 방금 전에는 있던 우리 음식이 사라졌다면,
+    # 안 보이더라도 적 팩맨이 그 근처에 있었다고 생각한다.
     oldFood = set(self.getFoodYouAreDefending(previous).asList())
     newFood = set(self.getFoodYouAreDefending(gameState).asList())
     return list(oldFood - newFood)
@@ -204,8 +209,8 @@ class TeamAgent(CaptureAgent):
     if not myState.isPacman:
       return 0
 
-    # Only active enemy ghosts are dangerous.  Scared ghosts are handled as
-    # possible bonus targets in the offensive evaluation.
+    # 공격 중일 때 무섭지 않은 적 유령만 진짜 위험하다.
+    # 겁먹은 유령은 오히려 잡을 수 있으므로 여기서는 위험으로 보지 않는다.
     active = self.activeGhosts(successor)
     if not active:
       return 0
@@ -214,8 +219,8 @@ class TeamAgent(CaptureAgent):
     minGhost = min(ghostDistances)
     penalty = 0
 
-    # Close ghosts are the main way to lose points, so this penalty dominates
-    # ordinary food-distance preferences.
+    # 적 유령이 가까우면 음식을 조금 더 먹는 것보다 도망치는 것이 중요하다.
+    # 그래서 가까울수록 큰 벌점을 준다.
     if minGhost <= 1:
       penalty -= 12000
     elif minGhost == 2:
@@ -234,15 +239,15 @@ class TeamAgent(CaptureAgent):
 
 
 class OffensiveAgent(TeamAgent):
-  """Food-focused agent that retreats only when visible danger is close."""
+  """주로 상대 음식을 먹는 공격수."""
 
   def evaluateAction(self, gameState, action):
     successor = self.getSuccessor(gameState, action)
     myState = successor.getAgentState(self.index)
     pos = myState.getPosition()
 
-    # Positive score means good for our team.  Eating food or killing an enemy
-    # shows up immediately in scoreDelta.
+    # 점수가 올라가는 행동은 좋은 행동이다.
+    # 음식을 먹거나 적을 잡으면 scoreDelta가 커진다.
     score = 0
     score += 1200 * self.scoreDelta(gameState, successor)
     score += 8 * self.getScore(successor)
@@ -258,8 +263,8 @@ class OffensiveAgent(TeamAgent):
     activeGhosts = self.activeGhosts(successor)
     activeGhostDistance = self.minDistance(pos, [p for i, s, p in activeGhosts])
 
-    # Main attacking goal: reduce remaining food and move toward the closest
-    # food, with a small bonus for dense nearby food clusters.
+    # 공격수의 기본 목표는 가까운 음식을 향해 가는 것이다.
+    # 주변에 음식이 여러 개 있으면 그쪽이 더 좋아 보이게 한다.
     if food:
       foodDistance = self.minDistance(pos, food)
       score -= 6.0 * foodDistance
@@ -270,7 +275,7 @@ class OffensiveAgent(TeamAgent):
 
     if capsules:
       capsuleDistance = self.minDistance(pos, capsules)
-      # Capsules matter most when an active ghost is close.
+      # 적 유령이 가까울 때는 캡슐이 특히 중요하다.
       if activeGhostDistance <= 6:
         score -= 5.5 * capsuleDistance
       else:
@@ -280,12 +285,12 @@ class OffensiveAgent(TeamAgent):
       score += 350
 
     if myState.isPacman and activeGhostDistance <= 5:
-      # If a visible ghost is threatening us, prefer paths back to our boundary.
+      # 적 유령이 가까우면 무리하지 말고 우리 진영 쪽으로 돌아가게 한다.
       score -= 7.0 * self.homeDistance(pos)
 
     for idx, ghostState, ghostPos in self.scaredGhosts(successor):
       distance = self.safeDistance(pos, ghostPos)
-      # Chase scared ghosts only when the timer is long enough to reach them.
+      # 겁먹은 유령은 시간이 충분할 때만 쫓아간다.
       if distance < ghostState.scaredTimer - 2:
         score += max(0, 18 - 2 * distance)
 
@@ -296,17 +301,17 @@ class OffensiveAgent(TeamAgent):
 
 
 class DefensiveAgent(TeamAgent):
-  """Home-side defender with a late-game/off-score attack fallback."""
+  """주로 우리 진영을 지키는 수비수."""
 
   def evaluateAction(self, gameState, action):
-    # The second agent normally defends, but can become a second attacker when
-    # defense is quiet and the map/score makes attacking worthwhile.
+    # 평소에는 수비를 한다.
+    # 하지만 적이 안 보이고 공격이 더 이득이면 잠깐 공격수처럼 움직인다.
     if self.shouldAttack(gameState):
       return self.attackEvaluation(gameState, action)
     return self.defenseEvaluation(gameState, action)
 
   def shouldAttack(self, gameState):
-    # Visible invaders or newly eaten defended food always take priority.
+    # 적 팩맨이 보이거나 우리 음식이 방금 먹혔다면 무조건 수비한다.
     if self.visibleInvaders(gameState) or self.recentlyLostFood(gameState):
       return False
 
@@ -314,12 +319,12 @@ class DefensiveAgent(TeamAgent):
     if remainingFood <= 5:
       return True
 
-    # Small-food layouts are easier to lose by over-attacking, so keep the
-    # defender home unless the game is almost finished.
+    # 음식이 적은 맵에서는 한 번 뚫리면 손해가 크다.
+    # 그래서 수비수를 쉽게 공격에 보내지 않는다.
     if self.initialFood < 35:
       return False
 
-    # Food-rich layouts reward early pressure from both agents.
+    # 음식이 많은 맵에서는 둘이 같이 공격하면 점수를 빨리 벌 수 있다.
     if self.initialFood >= 60 and self.getScore(gameState) <= 0:
       return True
     if self.getScore(gameState) <= -4:
@@ -332,8 +337,8 @@ class DefensiveAgent(TeamAgent):
     myState = successor.getAgentState(self.index)
     pos = myState.getPosition()
 
-    # This is a lighter version of the offensive evaluation for the defender's
-    # temporary attack mode.
+    # 수비수가 임시로 공격할 때 쓰는 점수 계산이다.
+    # 공격수보다 조금 더 조심스럽게 움직인다.
     score = 0
     score += 1100 * self.scoreDelta(gameState, successor)
     score += 7 * self.getScore(successor)
@@ -358,8 +363,10 @@ class DefensiveAgent(TeamAgent):
     myState = successor.getAgentState(self.index)
     pos = myState.getPosition()
 
-    # Defensive mode values staying on our side, catching invaders, and guarding
-    # useful central/capsule positions.
+    # 수비 모드에서는 세 가지를 중요하게 본다.
+    # 1. 우리 진영에 있기
+    # 2. 적 팩맨 잡기
+    # 3. 가운데나 캡슐 근처 지키기
     score = 0
     score += 1300 * self.scoreDelta(gameState, successor)
     score += 8 * self.getScore(successor)
@@ -375,7 +382,7 @@ class DefensiveAgent(TeamAgent):
 
     invaders = self.visibleInvaders(successor)
     if invaders:
-      # When an invader is visible, chasing it is more important than patrol.
+      # 적 팩맨이 보이면 순찰보다 추격이 먼저다.
       distances = [self.safeDistance(pos, invaderPos) for idx, state, invaderPos in invaders]
       closest = min(distances)
       score -= 95 * closest
@@ -388,8 +395,7 @@ class DefensiveAgent(TeamAgent):
 
     lostFood = self.recentlyLostFood(gameState)
     if lostFood:
-      # If an invader was seen indirectly through eaten food, move toward the
-      # missing dot to intercept.
+      # 적이 안 보여도 우리 음식이 사라졌다면 그쪽으로 가서 막는다.
       target = self.closestTarget(pos, lostFood)
       score -= 24 * self.safeDistance(pos, target)
       return score

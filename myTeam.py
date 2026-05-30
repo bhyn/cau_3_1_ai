@@ -17,6 +17,7 @@ import random
 
 def createTeam(firstIndex, secondIndex, isRed,
                first='OffensiveAgent', second='DefensiveAgent'):
+  # The submitted team is one attacker and one defender by default.
   return [globals()[first](firstIndex), globals()[second](secondIndex)]
 
 
@@ -25,6 +26,9 @@ class TeamAgent(CaptureAgent):
 
   def registerInitialState(self, gameState):
     CaptureAgent.registerInitialState(self, gameState)
+
+    # Cache map information that is reused every turn.  This keeps chooseAction
+    # cheap enough for the one-second time limit.
     self.start = gameState.getAgentPosition(self.index)
     self.walls = gameState.getWalls()
     self.width = self.walls.width
@@ -33,6 +37,9 @@ class TeamAgent(CaptureAgent):
     self.homeX = self.midX - 1 if self.red else self.midX
     self.enemyX = self.midX if self.red else self.midX - 1
     self.initialFood = len(self.getFood(gameState).asList())
+
+    # Boundary cells are the legal crossings between our side and enemy side.
+    # They are useful for returning home and for defensive patrol.
     self.homeBoundary = self._openColumn(self.homeX)
     self.enemyBoundary = self._openColumn(self.enemyX)
     self.legalPositions = [
@@ -41,14 +48,22 @@ class TeamAgent(CaptureAgent):
       for y in range(self.height)
       if not self.walls[x][y]
     ]
+
+    # Dead ends are risky when an active enemy ghost is visible nearby, so the
+    # offensive agent gives those positions an extra penalty.
     self.deadEnds = self._computeDeadEnds()
     self.patrolTarget = self._selectPatrolTarget()
 
   def chooseAction(self, gameState):
     actions = gameState.getLegalActions(self.index)
+
+    # Standing still almost never helps in capture, but keep it if it is the
+    # only legal action.
     if len(actions) > 1 and Directions.STOP in actions:
       actions.remove(Directions.STOP)
 
+    # This is a one-step reflex policy: simulate each legal move, score the
+    # successor state with hand-tuned features, then choose among the best moves.
     scores = [(self.evaluateAction(gameState, action), action) for action in actions]
     bestScore = max(score for score, action in scores)
     bestActions = [action for score, action in scores if score == bestScore]
@@ -60,6 +75,9 @@ class TeamAgent(CaptureAgent):
   def getSuccessor(self, gameState, action):
     successor = gameState.generateSuccessor(self.index, action)
     pos = successor.getAgentState(self.index).getPosition()
+
+    # Berkeley capture agents can occasionally be between grid cells.  Evaluating
+    # at the next grid point makes distance features more stable.
     if pos != nearestPoint(pos):
       return successor.generateSuccessor(self.index, action)
     return successor
@@ -74,6 +92,7 @@ class TeamAgent(CaptureAgent):
     return min(self.homeBoundary, key=lambda p: abs(p[1] - centerY))
 
   def _computeDeadEnds(self):
+    # Peel off degree-1 corridors until only non-dead-end cells remain.
     degrees = {}
     neighbors = {}
     for pos in self.legalPositions:
@@ -99,8 +118,11 @@ class TeamAgent(CaptureAgent):
     if pos1 is None or pos2 is None:
       return 9999
     try:
+      # Prefer exact maze distance from the precomputed distancer.
       return self.getMazeDistance(pos1, pos2)
     except Exception:
+      # Some unusual layouts may pass a non-open cell; fall back instead of
+      # crashing during evaluation.
       return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
   def minDistance(self, pos, targets):
@@ -164,6 +186,9 @@ class TeamAgent(CaptureAgent):
     previous = self.getPreviousObservation()
     if previous is None:
       return []
+
+    # If a defended food dot disappeared since our last observation, an invader
+    # was likely there even if it is no longer visible.
     oldFood = set(self.getFoodYouAreDefending(previous).asList())
     newFood = set(self.getFoodYouAreDefending(gameState).asList())
     return list(oldFood - newFood)
@@ -179,6 +204,8 @@ class TeamAgent(CaptureAgent):
     if not myState.isPacman:
       return 0
 
+    # Only active enemy ghosts are dangerous.  Scared ghosts are handled as
+    # possible bonus targets in the offensive evaluation.
     active = self.activeGhosts(successor)
     if not active:
       return 0
@@ -186,6 +213,9 @@ class TeamAgent(CaptureAgent):
     ghostDistances = [self.safeDistance(pos, ghostPos) for idx, state, ghostPos in active]
     minGhost = min(ghostDistances)
     penalty = 0
+
+    # Close ghosts are the main way to lose points, so this penalty dominates
+    # ordinary food-distance preferences.
     if minGhost <= 1:
       penalty -= 12000
     elif minGhost == 2:
@@ -211,6 +241,8 @@ class OffensiveAgent(TeamAgent):
     myState = successor.getAgentState(self.index)
     pos = myState.getPosition()
 
+    # Positive score means good for our team.  Eating food or killing an enemy
+    # shows up immediately in scoreDelta.
     score = 0
     score += 1200 * self.scoreDelta(gameState, successor)
     score += 8 * self.getScore(successor)
@@ -226,6 +258,8 @@ class OffensiveAgent(TeamAgent):
     activeGhosts = self.activeGhosts(successor)
     activeGhostDistance = self.minDistance(pos, [p for i, s, p in activeGhosts])
 
+    # Main attacking goal: reduce remaining food and move toward the closest
+    # food, with a small bonus for dense nearby food clusters.
     if food:
       foodDistance = self.minDistance(pos, food)
       score -= 6.0 * foodDistance
@@ -236,6 +270,7 @@ class OffensiveAgent(TeamAgent):
 
     if capsules:
       capsuleDistance = self.minDistance(pos, capsules)
+      # Capsules matter most when an active ghost is close.
       if activeGhostDistance <= 6:
         score -= 5.5 * capsuleDistance
       else:
@@ -245,10 +280,12 @@ class OffensiveAgent(TeamAgent):
       score += 350
 
     if myState.isPacman and activeGhostDistance <= 5:
+      # If a visible ghost is threatening us, prefer paths back to our boundary.
       score -= 7.0 * self.homeDistance(pos)
 
     for idx, ghostState, ghostPos in self.scaredGhosts(successor):
       distance = self.safeDistance(pos, ghostPos)
+      # Chase scared ghosts only when the timer is long enough to reach them.
       if distance < ghostState.scaredTimer - 2:
         score += max(0, 18 - 2 * distance)
 
@@ -262,18 +299,27 @@ class DefensiveAgent(TeamAgent):
   """Home-side defender with a late-game/off-score attack fallback."""
 
   def evaluateAction(self, gameState, action):
+    # The second agent normally defends, but can become a second attacker when
+    # defense is quiet and the map/score makes attacking worthwhile.
     if self.shouldAttack(gameState):
       return self.attackEvaluation(gameState, action)
     return self.defenseEvaluation(gameState, action)
 
   def shouldAttack(self, gameState):
+    # Visible invaders or newly eaten defended food always take priority.
     if self.visibleInvaders(gameState) or self.recentlyLostFood(gameState):
       return False
+
     remainingFood = len(self.getFood(gameState).asList())
     if remainingFood <= 5:
       return True
+
+    # Small-food layouts are easier to lose by over-attacking, so keep the
+    # defender home unless the game is almost finished.
     if self.initialFood < 35:
       return False
+
+    # Food-rich layouts reward early pressure from both agents.
     if self.initialFood >= 60 and self.getScore(gameState) <= 0:
       return True
     if self.getScore(gameState) <= -4:
@@ -286,6 +332,8 @@ class DefensiveAgent(TeamAgent):
     myState = successor.getAgentState(self.index)
     pos = myState.getPosition()
 
+    # This is a lighter version of the offensive evaluation for the defender's
+    # temporary attack mode.
     score = 0
     score += 1100 * self.scoreDelta(gameState, successor)
     score += 7 * self.getScore(successor)
@@ -310,6 +358,8 @@ class DefensiveAgent(TeamAgent):
     myState = successor.getAgentState(self.index)
     pos = myState.getPosition()
 
+    # Defensive mode values staying on our side, catching invaders, and guarding
+    # useful central/capsule positions.
     score = 0
     score += 1300 * self.scoreDelta(gameState, successor)
     score += 8 * self.getScore(successor)
@@ -325,6 +375,7 @@ class DefensiveAgent(TeamAgent):
 
     invaders = self.visibleInvaders(successor)
     if invaders:
+      # When an invader is visible, chasing it is more important than patrol.
       distances = [self.safeDistance(pos, invaderPos) for idx, state, invaderPos in invaders]
       closest = min(distances)
       score -= 95 * closest
@@ -337,6 +388,8 @@ class DefensiveAgent(TeamAgent):
 
     lostFood = self.recentlyLostFood(gameState)
     if lostFood:
+      # If an invader was seen indirectly through eaten food, move toward the
+      # missing dot to intercept.
       target = self.closestTarget(pos, lostFood)
       score -= 24 * self.safeDistance(pos, target)
       return score
